@@ -84,10 +84,11 @@ export async function prepare(ui: UI,
 
 // The user has explicitly asked to install the latest clangd.
 // Do so without further prompting, or report an error.
-export async function installLatest(ui: UI) {
+export async function installLatest(ui: UI, prerelease?: boolean) {
   const abort = new AbortController();
   try {
-    const release = await Github.latestRelease();
+    const release = prerelease ? await Github.latestPreRelease()
+                               : await Github.latestRelease();
     const asset = await Github.chooseAsset(release);
     ui.clangdPath = await Install.install(release, asset, abort, ui);
     ui.promptReload(`clangd ${release.name} is now installed.`);
@@ -145,8 +146,14 @@ const installURL = 'https://clangd.llvm.org/installation.html';
 // The GitHub API endpoint for the latest binary clangd release.
 let githubReleaseURL =
     'https://api.github.com/repos/clangd/clangd/releases/latest';
+// The GitHub API endpoint for all binary clangd releases.
+let githubAllReleasesURL =
+    'https://api.github.com/repos/clangd/clangd/releases';
 // Set a fake URL for testing.
 export function fakeGitHubReleaseURL(u: string) { githubReleaseURL = u; }
+export function fakeGitHubAllReleasesURL(u: string) {
+  githubAllReleasesURL = u;
+}
 let lddCommand = 'ldd';
 export function fakeLddCommand(l: string) { lddCommand = l; }
 
@@ -167,6 +174,20 @@ export async function latestRelease(): Promise<Release> {
     throw new Error(`Can't fetch release: ${response.statusText}`);
   }
   return await response.json() as Release;
+}
+
+// Fetch the metadata for the latest prerelease or stable clangd release.
+export async function latestPreRelease(): Promise<Release> {
+  const response = await fetch(githubAllReleasesURL);
+  if (!response.ok) {
+    console.log(response.url, response.status, response.statusText);
+    throw new Error(`Can't fetch release list: ${response.statusText}`);
+  }
+  const content = await response.json() as Release[];
+  if (!content.length) {
+    throw new Error(`Release list seems to be empty`);
+  }
+  return content[0];
 }
 
 // Determine which release asset should be installed for this machine.
@@ -191,7 +212,8 @@ export async function chooseAsset(release: Github.Release):
   }
   // 32-bit vscode is still common on 64-bit windows, so don't reject that.
   if (variant && (os.arch() == 'x64' || variant == 'windows')) {
-    const asset = release.assets.find(a => a.name.indexOf(variant) >= 0);
+    const asset =
+        release.assets.find(a => a.name.indexOf(`clangd-${variant}`) >= 0);
     if (asset)
       return asset;
   }

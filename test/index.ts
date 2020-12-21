@@ -16,7 +16,8 @@ const oldLdd = process.cwd() + '/test/assets/ldd/old';
 const newLdd = process.cwd() + '/test/assets/ldd/new';
 const notGlibcLdd = process.cwd() + '/test/assets/ldd/not-glibc';
 const missingClangd = process.cwd() + '/test/assets/missing/clangd';
-const releases = 'http://127.0.0.1:9999/release.json';
+const release = 'http://127.0.0.1:9999/release.json';
+const releases = 'http://127.0.0.1:9999/releases.json';
 const incompatibleReleases = 'http://127.0.0.1:9999/release-incompatible.json';
 
 // A fake editor that records interactions.
@@ -77,7 +78,8 @@ function test(name: string,
                          })
                          .listen(9999, '127.0.0.1', async () => {
                            console.log('Fake github serving...');
-                           install.fakeGitHubReleaseURL(releases);
+                           install.fakeGitHubReleaseURL(release);
+                           install.fakeGitHubAllReleasesURL(releases);
                            install.fakeLddCommand(exactLdd);
                            try {
                              await body(assert, ui);
@@ -99,6 +101,19 @@ test('install', async (assert, ui) => {
 
   const installedClangd =
       path.join(ui.storagePath, 'install', '10.0', 'fake-clangd-10', 'clangd');
+  assert.true(fs.existsSync(installedClangd),
+              `Extracted clangd exists: ${installedClangd}`);
+  assert.equal(ui.clangdPath, installedClangd);
+  assert.deepEqual(
+      ui.events, [/*download*/ 'progress', /*extract*/ 'slow', 'promptReload']);
+});
+
+test('install snapshot', async (assert, ui) => {
+  await install.installLatest(ui, true);
+
+  const installedClangd =
+      path.join(ui.storagePath, 'install', 'snapshot_20201122',
+                'fake-clangd-snapshot', 'clangd');
   assert.true(fs.existsSync(installedClangd),
               `Extracted clangd exists: ${installedClangd}`);
   assert.equal(ui.clangdPath, installedClangd);
